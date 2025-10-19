@@ -34,7 +34,7 @@ The project provides recommendation on the basis of the details the farmer provi
 |-----------|------------------|
 | Programming | Python |
 | Machine Learning | Pandas, NumPy |
-| Frontend / UI | 
+| Frontend / UI | Streamlit, Flask |
 | Data Sources | Soil datasets | KVK - Krishi Vigyan Kendra |
 | Version Control | Git & GitHub |
 
