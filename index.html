@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IFS Recommendation Tool</title>
+    <style>
+        /* CSS for Eye-Pleasing, Agriculture-Themed Color Scheme */
+
+        :root {
+            /* Primary Colors - Inspired by fertile soil and healthy growth */
+            --color-primary-green: #4C763B; /* Deep, healthy forest green */
+            --color-secondary-green: #B0CE88; /* Light, fresh spring green */
+            --color-earth-brown: #795548; /* Rich, dark earth/soil brown */
+            
+            /* Accent & Neutral Colors */
+            --color-accent-yellow: #FFFD8F; /* Soft, warm yellow/sunlight accent */
+            --color-background-light: #F8F8F0; /* Off-white/cream for paper feel */
+            --color-text-dark: #1C352D; /* Very dark green/almost black for readability */
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: var(--color-background-light);
+            color: var(--color-text-dark);
+            margin: 0;
+            padding: 0;
+            line-height: 1.6;
+        }
+
+        header {
+            background-color: var(--color-primary-green);
+            color: white;
+            padding: 20px 0;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 2em;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.05);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: var(--color-primary-green);
+        }
+
+        input[type="text"],
+        input[type="number"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid var(--color-secondary-green);
+            border-radius: 5px;
+            box-sizing: border-box; /* Ensures padding doesn't affect total width */
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus,
+        input[type="number"]:focus,
+        select:focus,
+        textarea:focus {
+            border-color: var(--color-earth-brown);
+            outline: none;
+        }
+        
+        button {
+            background-color: var(--color-earth-brown);
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 18px;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: var(--color-primary-green);
+        }
+
+        .note {
+            background-color: var(--color-accent-yellow);
+            padding: 15px;
+            border-left: 5px solid var(--color-primary-green);
+            margin-top: 30px;
+            border-radius: 5px;
+            font-style: italic;
+        }
+        
+        /* New Styles for Results Table */
+        #results table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        #results th, #results td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+
+        #results th {
+            background-color: var(--color-secondary-green);
+            color: var(--color-text-dark);
+            font-weight: bold;
+        }
+
+        #results tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        
+        #results tr:hover {
+            background-color: #f1f1f1;
+        }
+        
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>🌿 IFS Recommendation Tool (API Front-End)</h1>
+</header>
+
+<div class="container">
+    <h2>Input Parameters</h2>
+    
+    <form id="recommendation-form"> 
+        
+        <div class="form-group">
+            <label for="district">District Name:</label>
+            <input type="text" id="district" name="district" required placeholder="e.g., Agra" value="Agra">
+        </div>
+
+        <div class="form-group">
+            <label for="ph_min">Min Soil pH:</label>
+            <input type="number" id="ph_min" name="ph_min" step="0.1" min="1" max="14" placeholder="e.g., 6.0" value="6.0" required>
+        </div>
+
+        <div class="form-group">
+            <label for="ph_max">Max Soil pH:</label>
+            <input type="number" id="ph_max" name="ph_max" step="0.1" min="1" max="14" placeholder="e.g., 7.5" value="7.5" required>
+        </div>
+
+        <button type="submit">Get Synergistic Recommendation</button>
+    </form>
+
+    <div id="results">
+        <p>Enter your inputs and click the button to get the top IFS recommendations.</p>
+    </div>
+    
+    <div class="note">
+        <p><strong>Warning:</strong> The Python API server must be running in your terminal (`python app.py`) on <code>http://127.0.0.1:5000</code> for this tool to function.</p>
+    </div>
+</div>
+
+<script>
+    document.getElementById('recommendation-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        // 1. Collect user input
+        const district = document.getElementById('district').value;
+        const ph_min = document.getElementById('ph_min').value;
+        const ph_max = document.getElementById('ph_max').value;
+        
+        // The API URL defined in your app.py
+        const apiUrl = 'http://127.0.0.1:5000/api/recommend'; 
+        const resultsDiv = document.getElementById('results');
+
+        resultsDiv.innerHTML = '<p style="color: var(--color-primary-green); font-weight: bold;">Processing data and fetching recommendations...</p>';
+
+        // 2. Send data to the Flask API using POST method
+        fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                district: district,
+                ph_min: parseFloat(ph_min),
+                ph_max: parseFloat(ph_max),
+                top_n: 5 
+            }),
+        })
+        .then(response => {
+            // Error handling for HTTP status codes (400, 500)
+            if (!response.ok) {
+                return response.json().then(errorData => {
+                    throw new Error(errorData.error || `Server responded with status: ${response.status}`);
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            // 3. Handle the successful response and display results
+            if (data.recommendations && data.recommendations.length > 0) {
+                let html = '<h3>Top Synergistic Recommendations:</h3>';
+                html += '<table border="1">';
+                html += '<tr style="background-color: var(--color-secondary-green);"><th>Item</th><th>Final Confidence</th><th>Synergy Bonus</th></tr>';
+                
+                data.recommendations.forEach(rec => {
+                    // Displaying the results from the API JSON response
+                    html += `<tr><td>${rec.Item}</td><td>${rec.Final_Confidence}</td><td>${rec.Synergy_Bonus}</td></tr>`;
+                });
+                
+                html += '</table>';
+                resultsDiv.innerHTML = html;
+            } else {
+                resultsDiv.innerHTML = '<p>No recommendations found for the given parameters.</p>';
+            }
+        })
+        .catch(error => {
+            // Handle network errors (API not running) or custom server errors
+            resultsDiv.innerHTML = `<p style="color: red; font-weight: bold;">Connection Error: ${error.message}. Please verify the API is running in your terminal and accessible.</p>`;
+            console.error('API Interaction Error:', error);
+        });
+    });
+</script>
+
+</body>
+</html>
