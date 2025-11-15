@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ translation.recommended }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<header>
+    <img src="{{ url_for('static', filename='images/logo.png') }}" class="logo">
+    <h1>{{ translation.recommended }}</h1>
+</header>
+
+<main>
+    <section class="info">
+        <h2>🌍 District: {{ district }}</h2>
+        <h3>🌾 Soil Type: {{ soil }}</h3>
+        <h3>🧭 Land Area: {{ land_area }} hectare</h3>
+    </section>
+
+    <section class="weather">
+        <h2>🌦 Weather</h2>
+        <p>Temperature: {{ weather.temp }} °C</p>
+        <p>Condition: {{ weather.description }}</p>
+    </section>
+
+    <section class="recommendation-cards">
+        <div class="card">
+            <h3>{{ translation.tree }}</h3>
+            <p>{{ rec.tree }}</p>
+            <p>{{ allocation.trees }}</p>
+        </div>
+
+        <div class="card">
+            <h3>{{ translation.crop }}</h3>
+            <p>{{ rec.crop }}</p>
+            <p>{{ allocation.crops }}</p>
+        </div>
+
+        <div class="card">
+            <h3>{{ translation.flower }}</h3>
+            <p>{{ rec.flower }}</p>
+            <p>{{ allocation.flowers }}</p>
+        </div>
+    </section>
+
+    <section class="layout">
+        <h3>🌱 Layout Suggestion</h3>
+        <p>{{ allocation.layout }}</p>
+    </section>
+
+    <a href="/">← Back to Home</a>
+</main>
+
+<footer>
+    <p>© 2025 Krishi Vigyan Kendra | Govt. of India</p>
+</footer>
+</body>
+</html>

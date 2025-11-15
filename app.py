@@ -1,130 +1,137 @@
-import flask
+from flask import Flask, render_template, request
 import pickle
+import requests
 import pandas as pd
-import numpy as np
-import re
-from flask import Flask, request, jsonify
-from flask_cors import CORS # Needed to allow your website (front-end) to talk to the API
 
-# Initialize the Flask app
 app = Flask(__name__)
-CORS(app) # Enable CORS for all routes
 
-# --- Load Model Artifacts ---
-try:
-    with open('./recommendation_artifacts/ifs_recommendation_model.pkl', 'rb') as file:
-        artifacts = pickle.load(file)
+# -----------------------------
+# Load datasets globally
+# -----------------------------
+trees_df = pd.read_csv("datasets/Commercial_trees_UttarPradesh.csv")
+crops_df = pd.read_csv("datasets/Field_Crop_UttarPradesh.csv")
+flowers_df = pd.read_csv("datasets/flori.csv")
 
-    model = artifacts['model']
-    le = artifacts['label_encoder']
-    X_cols = artifacts['feature_cols']
-    all_district_cols = artifacts['all_district_cols']
-    # Use a different name here to prevent shadowing the matrix inside the function
-    synergy_matrix_loaded = artifacts['interaction_matrix'] 
-    
-    print("Model Artifacts Loaded Successfully.")
+# -----------------------------
+# Load trained model if required (currently optional)
+# -----------------------------
+# model = pickle.load(open("IFS_model.pkl", "rb"))
 
-except FileNotFoundError:
-    print("Error: Model file 'ifs_recommendation_model.pkl' not found. Please run the export step.")
-    # Exit or handle gracefully in a real application
-
-# --- Recommendation Function (Copied/Adapted for the API) ---
-def api_recommend_ifs_combination_with_synergy(district_name, soil_ph_min, soil_ph_max, top_n=5):
-    """
-    Generates a synergistic recommendation list using loaded artifacts.
-    """
-    district_name = district_name.strip()
-    district_col_name = f'District_{district_name}'
-    
-    # 1. Input Feature Setup & Validation
-    if district_col_name not in X_cols:
-        # Cannot provide full list of districts in API, so return simple error
-        return {"error": f"District '{district_name}' not supported."}, 400
-
-    input_features = {col: 0 for col in all_district_cols} 
-    input_features['pH_min'] = soil_ph_min
-    input_features['pH_max'] = soil_ph_max
-    input_features[district_col_name] = 1
-
-    sample_input = pd.DataFrame([input_features])
-    for c in set(X_cols) - set(sample_input.columns):
-        sample_input[c] = 0
-    sample_input = sample_input[X_cols]
-
-    # 2. Phase 1: Base Prediction
-    proba = model.predict_proba(sample_input)[0]
-    top_indices = np.argsort(proba)[-20:][::-1] # Use a fixed size for base list
-    
-    base_recommendations = []
-    for index in top_indices:
-        item_name = le.inverse_transform([index])[0]
-        base_recommendations.append({
-            'Item': item_name,
-            'Base_Confidence': proba[index]
-        })
-    df_base = pd.DataFrame(base_recommendations)
-
-    if df_base.empty:
-        return {"error": "Model produced no recommendations."}, 400
-    
-    # 3. Phase 2: Synergy Scoring (Robust Anchor Selection)
-    # We must assume the top item is the anchor since we don't have the category column (df_combined)
-    # To keep the API fast, we skip the category lookup and use the highest confidence item as the anchor
-    primary_crop = df_base.iloc[0]['Item']
-
-    final_recommendations = []
-    for index, row in df_base.iterrows():
-        item = row['Item']
-        confidence = row['Base_Confidence']
-        synergy_score = 0
-        
-        # Check synergy in both directions
-        if primary_crop in synergy_matrix_loaded and item in synergy_matrix_loaded[primary_crop]:
-            synergy_score = synergy_matrix_loaded[primary_crop][item]
-        elif item in synergy_matrix_loaded and primary_crop in synergy_matrix_loaded[item]:
-            synergy_score = synergy_matrix_loaded[item][primary_crop]
-            
-        final_confidence = confidence * (1 + synergy_score)
-        
-        final_recommendations.append({
-            'Item': item,
-            'Synergy_Bonus': f"{synergy_score*100:.2f}%",
-            'Final_Confidence': final_confidence
-        })
-
-    df_final = pd.DataFrame(final_recommendations).sort_values(by='Final_Confidence', ascending=False)
-    
-    # Format and return the top 5
-    df_final['Final_Confidence'] = df_final['Final_Confidence'].apply(lambda x: f"{x*100:.2f}%")
-    return df_final.head(top_n).to_dict('records'), 200
-
-
-# --- API Endpoint Definition ---
-@app.route('/api/recommend', methods=['POST'])
-def recommend():
-    """Endpoint to receive user input and return recommendations."""
+# -----------------------------
+# Open-Meteo API Configuration
+# -----------------------------
+def get_weather(district):
     try:
-        data = request.get_json()
-        
-        # Validate and extract input
-        district = data['district']
-        ph_min = float(data['ph_min'])
-        ph_max = float(data['ph_max'])
-        top_n = int(data.get('top_n', 5))
-        
-        # Get recommendations
-        recommendations, status_code = api_recommend_ifs_combination_with_synergy(district, ph_min, ph_max, top_n)
-        
-        if status_code != 200:
-             return jsonify({"success": False, "error": recommendations['error']}), status_code
+        geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={district}&count=1&language=en&format=json"
+        geo_data = requests.get(geo_url).json()
 
-        return jsonify({"success": True, "recommendations": recommendations})
+        if "results" not in geo_data or len(geo_data["results"]) == 0:
+            return {"temp": "N/A", "humidity": "N/A", "description": "Not Found"}
 
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
+        lat = geo_data["results"][0]["latitude"]
+        lon = geo_data["results"][0]["longitude"]
 
-# Run the app
-if __name__ == '__main__':
-    # 1. Install required libraries: pip install Flask pandas numpy scikit-learn flask-cors
-    # 2. Run the server: python app.py
-    app.run(host='0.0.0.0', port=5000, debug=True)
+        weather_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
+        data = requests.get(weather_url).json()
+        temp = data["current_weather"]["temperature"]
+        description = data["current_weather"]["weathercode"]
+
+        return {"temp": temp, "humidity": "N/A", "description": f"Weather Code: {description}"}
+    except:
+        return {"temp": "N/A", "humidity": "N/A", "description": "Not Found"}
+
+# -----------------------------
+# Recommendation function
+# -----------------------------
+def get_recommendation(district, soil):
+    # Tree selection
+    tree_row = trees_df[trees_df.iloc[:, 0] == district]
+    tree = tree_row.sample(1).iloc[0,1].split('—')[0].strip() if not tree_row.empty else "Unknown"
+
+    # Crop selection
+    crop_row = crops_df[(crops_df.iloc[:,0] == district) & (crops_df.iloc[:,2].str.contains(soil, case=False, na=False))]
+    if not crop_row.empty:
+        crop = crop_row.sample(1).iloc[0,1].strip()
+    else:
+        fallback = crops_df[crops_df.iloc[:,0] == district]
+        crop = fallback.sample(1).iloc[0,1].strip() if not fallback.empty else "Unknown"
+
+    # Flower selection
+    flower_row = flowers_df[flowers_df.iloc[:,0] == district]
+    if not flower_row.empty:
+        flowers_list = flower_row.iloc[0,1].split(',')
+        flower = flowers_list[0].strip()  # pick first flower
+    else:
+        flower = "Unknown"
+
+    return {"tree": tree, "crop": crop, "flower": flower}
+
+# -----------------------------
+# Home page
+# -----------------------------
+@app.route('/')
+def home():
+    # Combine all districts from the three datasets
+    districts = pd.concat([
+        trees_df.iloc[:,0],
+        crops_df.iloc[:,0],
+        flowers_df.iloc[:,0]
+    ]).dropna().unique()
+    districts = sorted(districts)
+    return render_template("index.html", districts=districts)
+
+# -----------------------------
+# Prediction route
+# -----------------------------
+@app.route('/predict', methods=['POST'])
+def predict():
+    district = request.form['district']
+    soil = request.form.get('soil', 'loamy')
+    lang = request.form.get('language', 'english')
+    try:
+        land_area = float(request.form.get('area', 1.0))
+    except ValueError:
+        land_area = 1.0
+
+    # Weather info
+    weather = get_weather(district)
+
+    # Get recommendation
+    rec = get_recommendation(district, soil)
+
+    # Allocation percentages
+    tree_pct, flower_pct, crop_pct = 0.2, 0.3, 0.5
+    allocation = {
+        "trees": f"{tree_pct * land_area:.2f} hectares ({int(tree_pct*100)}%)",
+        "flowers": f"{flower_pct * land_area:.2f} hectares ({int(flower_pct*100)}%)",
+        "crops": f"{crop_pct * land_area:.2f} hectares ({int(crop_pct*100)}%)",
+        "layout": "Plant trees on the borders and flowers/crops in the middle"
+    }
+
+    # Hindi translations
+    if lang.lower() in ['hi', 'hindi']:
+        translation = {"tree": "पेड़", "crop": "फसल", "flower": "फूल", "recommended": "एकीकृत खेती प्रणाली की अनुशंसा"}
+        allocation = {
+            "trees": f"{tree_pct * land_area:.2f} हेक्टेयर ({int(tree_pct*100)}%) पर पेड़",
+            "flowers": f"{flower_pct * land_area:.2f} हेक्टेयर ({int(flower_pct*100)}%) पर फूल",
+            "crops": f"{crop_pct * land_area:.2f} हेक्टेयर ({int(crop_pct*100)}%) पर फसल",
+            "layout": "सीमाओं पर पेड़ और बीच में फूल/फसल लगाएँ"
+        }
+    else:
+        translation = {"tree": "Tree", "crop": "Crop", "flower": "Flower", "recommended": "Integrated Farming System Recommendation"}
+
+    return render_template("result.html",
+                           district=district,
+                           weather=weather,
+                           rec=rec,
+                           soil=soil,
+                           land_area=land_area,
+                           translation=translation,
+                           lang=lang,
+                           allocation=allocation)
+
+# -----------------------------
+# Run app
+# -----------------------------
+if __name__ == "__main__":
+    app.run(debug=True)
